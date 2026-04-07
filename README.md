@@ -15,7 +15,6 @@ ollama serve
 ## 3) Start the chat server
 
 ```bash
-cd /Users/politrons/development/GenAICode
 python3 gen_code_server.py
 ```
 
