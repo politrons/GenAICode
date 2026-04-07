@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local Gemma 4 Code Chat</title>
+  <style>
+    :root {
+      --bg: #0c1219;
+      --bg-soft: #111b26;
+      --card: #172434;
+      --text: #eaf1ff;
+      --muted: #9bb2cf;
+      --accent: #64d3b4;
+      --danger: #ff8d8d;
+      --user: #1f3652;
+      --assistant: #1a2b3f;
+      --code-bg: #0a1017;
+      --border: #2a3e57;
+      --shadow: rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 20% 0%, #17324f 0%, transparent 34%),
+        radial-gradient(circle at 100% 10%, #1a4c4a 0%, transparent 26%),
+        linear-gradient(180deg, #0c1219 0%, #0a0f15 100%);
+      font-family: "JetBrains Mono", "Iosevka", "Fira Code", monospace;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .app {
+      width: min(1100px, 100%);
+      height: min(90vh, 900px);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent), var(--bg-soft);
+      box-shadow: 0 24px 60px var(--shadow);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0.03em;
+      font-weight: 700;
+      color: #d8f4ea;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .status {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 11px;
+      padding: 2px 8px;
+      line-height: 1.4;
+    }
+
+    .status.ok {
+      color: #b9f4df;
+      border-color: #2f8d75;
+      background: rgba(47, 141, 117, 0.2);
+    }
+
+    .status.warn {
+      color: #ffe3a8;
+      border-color: #8b6b2d;
+      background: rgba(139, 107, 45, 0.2);
+    }
+
+    .status.down {
+      color: #ffc6c6;
+      border-color: #8a3a3a;
+      background: rgba(138, 58, 58, 0.2);
+    }
+
+    .status.busy {
+      color: #d9ebff;
+      border-color: #3c5f89;
+      background: rgba(60, 95, 137, 0.2);
+    }
+
+    #messages {
+      overflow: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scroll-behavior: smooth;
+    }
+
+    .msg {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      line-height: 1.5;
+      max-width: 100%;
+    }
+
+    .msg.user {
+      background: linear-gradient(180deg, rgba(112,182,255,0.15), rgba(112,182,255,0.04)), var(--user);
+    }
+
+    .msg.assistant {
+      background: linear-gradient(180deg, rgba(100,211,180,0.15), rgba(100,211,180,0.04)), var(--assistant);
+    }
+
+    .msg.pending {
+      border-style: dashed;
+      opacity: 0.9;
+    }
+
+    .msg-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .content p {
+      margin: 0 0 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .content p:last-child {
+      margin-bottom: 0;
+    }
+
+    .code-wrap {
+      margin: 8px 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--code-bg);
+    }
+
+    .code-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .code-copy {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 6px;
+      font-size: 11px;
+      padding: 3px 7px;
+      cursor: pointer;
+    }
+
+    .code-copy:hover {
+      color: var(--text);
+      border-color: #4f6887;
+    }
+
+    pre {
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .error {
+      color: var(--danger);
+      white-space: pre-wrap;
+    }
+
+    .composer {
+      padding: 14px;
+      border-top: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.2);
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    textarea {
+      width: 100%;
+      resize: vertical;
+      min-height: 68px;
+      max-height: 220px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0d1622;
+      color: var(--text);
+      padding: 10px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0f1f2f;
+      color: var(--text);
+      padding: 10px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      letter-spacing: 0.02em;
+    }
+
+    button:hover {
+      border-color: #4f6887;
+      background: #12283d;
+    }
+
+    button.primary {
+      border-color: #2f8d75;
+      background: linear-gradient(180deg, #1d5d53, #18483f);
+      color: #dffff6;
+    }
+
+    button.primary:hover {
+      border-color: #5cc9ab;
+      background: linear-gradient(180deg, #236d61, #1c5149);
+    }
+
+    @media (max-width: 760px) {
+      body { padding: 8px; }
+      .app { height: 96vh; border-radius: 12px; }
+      .composer {
+        grid-template-columns: 1fr;
+      }
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <h1>Local Gemma 4 Code Chat</h1>
+      <div class="meta">
+        <span>Model: <strong id="model-label"></strong></span>
+        <span id="status-badge" class="status down">Not checked</span>
+      </div>
+    </div>
+    <div id="messages"></div>
+    <div class="composer">
+      <textarea id="input" placeholder="Ask a programming question or paste code to fix..."></textarea>
+      <button id="clear-btn" type="button">Clear Chat</button>
+      <button id="send-btn" type="button" class="primary">Send</button>
+    </div>
+  </div>
+
+  <script>
+    const MODEL = "__MODEL__";
+    const modelLabel = document.getElementById("model-label");
+    const statusBadge = document.getElementById("status-badge");
+    const messagesEl = document.getElementById("messages");
+    const inputEl = document.getElementById("input");
+    const sendBtn = document.getElementById("send-btn");
+    const clearBtn = document.getElementById("clear-btn");
+    const REQUEST_TIMEOUT_MS = __REQUEST_TIMEOUT_MS__;
+
+    modelLabel.textContent = MODEL;
+
+    const state = {
+      messages: [
+        {
+          role: "assistant",
+          content: "Chat ready. Ask for new code or paste code to fix.\n\nNote: gemma4:31b can be slow on CPU."
+        }
+      ],
+      sending: false
+    };
+
+    function setStatus(label, variant) {
+      statusBadge.textContent = label;
+      statusBadge.className = `status ${variant}`;
+    }
+
+    async function checkHealth() {
+      setStatus("Checking...", "busy");
+      try {
+        const res = await fetch("/api/health", { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        if (data.ollama_reachable) {
+          setStatus("Ollama connected", "ok");
+        } else {
+          setStatus("Ollama not responding", "warn");
+          state.messages.push({
+            role: "assistant",
+            content: "Cannot connect to Ollama right now.\n\n```text\n" + String(data.ollama_error || "No details") + "\n```"
+          });
+          render();
+        }
+      } catch (err) {
+        setStatus("Server unavailable", "down");
+      }
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function splitCodeFences(text) {
+      const parts = [];
+      const regex = /```([A-Za-z0-9_+.-]*)\n([\s\S]*?)```/g;
+      let last = 0;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        if (match.index > last) {
+          parts.push({ type: "text", value: text.slice(last, match.index) });
+        }
+        parts.push({
+          type: "code",
+          lang: (match[1] || "text").trim() || "text",
+          value: match[2]
+        });
+        last = regex.lastIndex;
+      }
+      if (last < text.length) {
+        parts.push({ type: "text", value: text.slice(last) });
+      }
+      return parts;
+    }
+
+    function renderMessageContent(content) {
+      const parts = splitCodeFences(content);
+      return parts.map((part, idx) => {
+        if (part.type === "text") {
+          const trimmed = part.value.trim();
+          if (!trimmed) return "";
+          return `<p>${escapeHtml(trimmed)}</p>`;
+        }
+        const codeId = `code-${Date.now()}-${Math.random().toString(36).slice(2)}-${idx}`;
+        return `
+          <div class="code-wrap">
+            <div class="code-head">
+              <span>${escapeHtml(part.lang)}</span>
+              <button class="code-copy" data-target="${codeId}" type="button">Copy</button>
+            </div>
+            <pre id="${codeId}"><code>${escapeHtml(part.value)}</code></pre>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function render() {
+      messagesEl.innerHTML = "";
+      state.messages.forEach((msg) => {
+        const card = document.createElement("div");
+        card.className = `msg ${msg.role === "user" ? "user" : "assistant"}${msg.pending ? " pending" : ""}`;
+        const who = msg.role === "user" ? "You" : (msg.pending ? "Gemma (thinking)" : "Gemma");
+        card.innerHTML = `
+          <div class="msg-header">
+            <span>${who}</span>
+          </div>
+          <div class="content">${renderMessageContent(msg.content)}</div>
+        `;
+        messagesEl.appendChild(card);
+      });
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    async function sendMessage() {
+      if (state.sending) return;
+      const raw = inputEl.value.trim();
+      if (!raw) return;
+
+      state.sending = true;
+      sendBtn.disabled = true;
+      clearBtn.disabled = true;
+      inputEl.disabled = true;
+      setStatus("Generating...", "busy");
+
+      state.messages.push({ role: "user", content: raw });
+      const pendingMessage = {
+        role: "assistant",
+        content: "Thinking... please wait a few seconds.",
+        pending: true
+      };
+      state.messages.push(pendingMessage);
+      const pendingIndex = state.messages.length - 1;
+      inputEl.value = "";
+      render();
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            history: state.messages
+              .filter(m => !m.pending)
+              .filter(m => m.role === "user" || m.role === "assistant")
+          }),
+          signal: controller.signal
+        });
+        const contentType = res.headers.get("content-type") || "";
+        let data = null;
+        if (contentType.includes("application/json")) {
+          data = await res.json();
+        } else {
+          const txt = await res.text();
+          throw new Error(`Non-JSON response from server: ${txt.slice(0, 180)}`);
+        }
+        if (!res.ok) {
+          throw new Error(data.error || "Unknown error");
+        }
+        state.messages[pendingIndex] = { role: "assistant", content: data.reply };
+        setStatus("Ready", "ok");
+      } catch (err) {
+        const errMsg = err && err.name === "AbortError"
+          ? "Timed out waiting for the model response. Try a shorter prompt or a smaller model."
+          : String(err.message || err);
+        state.messages[pendingIndex] = {
+          role: "assistant",
+          content: "Error while querying the model.\n\n```text\n" + errMsg + "\n```"
+        };
+        setStatus("Error", "down");
+      } finally {
+        clearTimeout(timeoutId);
+        state.sending = false;
+        sendBtn.disabled = false;
+        clearBtn.disabled = false;
+        inputEl.disabled = false;
+        inputEl.focus();
+        render();
+      }
+    }
+
+    sendBtn.addEventListener("click", sendMessage);
+    clearBtn.addEventListener("click", () => {
+      if (state.sending) return;
+      state.messages = [{
+        role: "assistant",
+        content: "Chat reset. Give me a programming task."
+      }];
+      render();
+      inputEl.focus();
+    });
+
+    inputEl.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && !ev.shiftKey) {
+        ev.preventDefault();
+        sendMessage();
+      }
+    });
+
+    messagesEl.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest(".code-copy");
+      if (!btn) return;
+      const targetId = btn.getAttribute("data-target");
+      const pre = document.getElementById(targetId);
+      if (!pre) return;
+      const text = pre.innerText;
+      await navigator.clipboard.writeText(text);
+      const old = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => { btn.textContent = old; }, 900);
+    });
+
+    render();
+    checkHealth();
+    inputEl.focus();
+  </script>
+</body>
+</html>
