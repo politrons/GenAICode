@@ -1,4 +1,4 @@
-# Local Gemma 4 Code Chat
+# Local Code Assistant Chat
 
 ## 1) Download the local model
 
