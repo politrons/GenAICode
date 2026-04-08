@@ -21,19 +21,16 @@ class OllamaLocalClient:
     """Thin client for a local Ollama server."""
 
     def __init__(self, *, base_url: str, model: str, timeout_s: int) -> None:
+        """Store connection settings for local Ollama chat requests."""
         self.base_url = base_url
         self.model = model
         self.timeout_s = timeout_s
 
-    def chat(self, *, messages: list[dict[str, str]], temperature: float = 0.2) -> str:
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-        }
+    def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Send one JSON POST request to Ollama and decode the JSON response."""
         body = json.dumps(payload).encode("utf-8")
         req = Request(
-            f"{self.base_url.rstrip('/')}/v1/chat/completions",
+            f"{self.base_url.rstrip('/')}{path}",
             data=body,
             method="POST",
             headers={"Content-Type": "application/json"},
@@ -51,13 +48,42 @@ class OllamaLocalClient:
                 "Make sure `ollama serve` is running on localhost:11434."
             ) from exc
 
-        data: dict[str, Any] = json.loads(raw)
         try:
-            return data["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise RuntimeError(f"Unexpected response from Ollama: {raw}") from exc
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Unexpected non-JSON response from Ollama: {raw}") from exc
+
+    def chat_once(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.2,
+    ) -> dict[str, Any]:
+        """Call Ollama /api/chat once, optionally enabling tool-calling."""
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "options": {"temperature": temperature},
+        }
+        if tools:
+            payload["tools"] = tools
+        return self._post_json("/api/chat", payload)
+
+    def chat(self, *, messages: list[dict[str, Any]], temperature: float = 0.2) -> str:
+        """Convenience wrapper that returns only the assistant text content."""
+        data = self.chat_once(messages=messages, temperature=temperature)
+        message = data.get("message")
+        if not isinstance(message, dict):
+            raise RuntimeError(f"Unexpected response from Ollama: {data}")
+        content = message.get("content")
+        if not isinstance(content, str):
+            raise RuntimeError(f"Unexpected response from Ollama: {data}")
+        return content
 
     def check_health(self, *, timeout_s: int = 3) -> tuple[bool, str | None]:
+        """Check whether the local Ollama instance is reachable."""
         req = Request(
             f"{self.base_url.rstrip('/')}/api/tags",
             method="GET",
@@ -76,9 +102,9 @@ class OllamaLocalClient:
             return False, str(exc)
 
 
-def build_messages_from_history(history: list[dict[str, Any]]) -> list[dict[str, str]]:
+def build_messages_from_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Build valid chat messages from request history and prepend system prompt."""
-    messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     for msg in history:
         if not isinstance(msg, dict):
             continue

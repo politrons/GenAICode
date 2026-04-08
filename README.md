@@ -18,6 +18,12 @@ ollama serve
 python3 gen_code_server.py
 ```
 
+Or with a specific initial workdir:
+
+```bash
+python3 gen_code_server.py --workdir ./sandbox
+```
+
 ## 4) Open the chat
 
 Open:
